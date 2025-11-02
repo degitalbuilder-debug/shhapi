@@ -13,7 +13,7 @@ dotenv.config();
 const app = express();
 app.use(helmet());
 app.use(cors({
-  origin: [ "https://teradownloader.netlify.app/" ] // replace with your frontend origin(s)
+  origin: [ "https://teradownloader.netlify.app/" ,"http://localhost:3000/test","http://localhost:3001/test"] // replace with your frontend origin(s)
 }));
 app.use(express.json());
 app.use(rateLimit({ windowMs:60*1000, max: 60 }));
@@ -127,3 +127,4 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
+
