@@ -4,7 +4,6 @@ import cors from "cors";
 import axios from "axios";
 import qs from "qs";
 import dotenv from "dotenv";
-import cheerio from "cheerio";
 
 
 dotenv.config();
@@ -39,7 +38,7 @@ function verifyEncryptedToken(req, res, next) {
     next();
   } catch (err) {
     console.error("Verification error:", err.message);
-    res.status(403).json({ error: "kya be chutiye" });
+    res.status(403).json({ error: "kya  chiiye" });
   }
 }
 
