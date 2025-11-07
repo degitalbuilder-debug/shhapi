@@ -10,7 +10,9 @@ import { load } from "cheerio";
 
 dotenv.config();
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ["http://localhost:3000", "https://aktubrand.vercel.app"]
+}));
 app.use(express.json());
 
 // 🔑 Use .env secret for consistency
