@@ -4,6 +4,9 @@ import cors from "cors";
 import axios from "axios";
 import qs from "qs";
 import dotenv from "dotenv";
+import { load } from "cheerio";
+
+
 
 dotenv.config();
 const app = express();
@@ -70,34 +73,10 @@ async function fetchOneViewResult(rollNo) {
 
   const response = await axios.post(url, qs.stringify(data), { headers });
   let html = response.data;
+ 
+return html; 
 
- // 🧹 Clean and modify HTML
-html = html
-  // Remove all <script> tags (including self-closing)
-  .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, "")
-  .replace(/<script[^>]*\/>/gi, "")
-  // Remove all <a> tags but keep inner text
-  .replace(/<a\b[^>]*>(.*?)<\/a>/gi, "$1")
-  // Inject your custom script before </body>
-  .replace(/<\/body>/i, `
-    <script>
-      const headers = document.getElementsByClassName("headerclass");
-      Array.from(headers).forEach(header => {
-        header.addEventListener("click", () => {
-          const targetId = header.id;
-          const targetDiv = document.querySelectorAll(\`#\${targetId}\`)[1];
-          if (targetDiv) {
-            targetDiv.style.display =
-              targetDiv.style.display === "block" ? "none" : "block";
-          }
-        });
-      });
-    </script>
-  </body>`);
-
-
-
-  return html;
+ 
 }
 
 app.post("/api/secure", verifyEncryptedToken, async (req, res) => {
