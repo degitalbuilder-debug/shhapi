@@ -5,6 +5,7 @@ import axios from "axios";
 import qs from "qs";
 import dotenv from "dotenv";
 
+import jwt from "jsonwebtoken";
 dotenv.config();
 const app = express();
 app.use(cors());
@@ -14,42 +15,20 @@ app.use(express.json());
 const SECRET = process.env.SECRET_KEY;
 
 // ---------------------- HMAC Token Verification ----------------------
-function verifyHMACToken(req, res, next) {
+ function verifyJWT(req, res, next) {
+  const token = req.headers["x-secure-token"];
+  if (!token) return res.status(403).json({ error: "Missing token" });
+
   try {
-    const token = req.headers["x-secure-token"];
-    if (!token) return res.status(403).json({ error: "Missing secure token" });
-
-    // Token format: base64Payload.signature
-    const [payloadB64, signature] = token.split(".");
-    if (!payloadB64 || !signature)
-      return res.status(403).json({ error: "error aa gaya na bsdk" });
-
-    const payloadStr = Buffer.from(payloadB64, "base64").toString("utf8");
-
-    // Verify signature
-    const expected = crypto
-      .createHmac("sha256", SECRET)
-      .update(payloadStr)
-      .digest("base64");
-
-    if (expected !== signature)
-      return res.status(403).json({ error: "error aa gaya na bsdk" });
-
-    const payload = JSON.parse(payloadStr);
-
-    // Check expiration (2 minutes)
-    if (Date.now() - payload.timestamp > 2 * 60 * 1000)
-      return res.status(403).json({ error: "are chutiye!!" });
-
-    // Attach payload to request if needed
-    req.tokenPayload = payload;
-
+    const payload = jwt.verify(token, SECRET); // auto checks expiry
+    req.tokenPayload = payload; // optional
     next();
   } catch (err) {
-    console.error("Token verification error:", err.message);
-    res.status(403).json({ error: "Invalid token" });
+    console.error("JWT verification error:", err.message);
+    res.status(403).json({ error: "kya be chirkut" });
   }
 }
+
 
 // ---------------------- Fetch OneView Result ----------------------
 async function fetchOneViewResult(rollNo) {
@@ -84,7 +63,7 @@ async function fetchOneViewResult(rollNo) {
 }
 
 // ---------------------- Routes ----------------------
-app.post("/api/secure", verifyHMACToken, async (req, res) => {
+app.post("/api/secure", verifyJWT, async (req, res) => {
   try {
     const { rollNo } = req.body;
     if (!rollNo) return res.status(400).json({ error: "Missing roll number" });
