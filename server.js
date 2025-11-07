@@ -1,130 +1,118 @@
 import express from "express";
-import helmet from "helmet";
-import cors from "cors";
-import rateLimit from "express-rate-limit";
 import crypto from "crypto";
+import cors from "cors";
 import axios from "axios";
 import qs from "qs";
-import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
 
 dotenv.config();
-
 const app = express();
-app.use(helmet());
 app.use(cors());
 app.use(express.json());
-app.use(rateLimit({ windowMs:60*1000, max: 60 }));
 
-// In-memory session store (for demo). Use Redis or DB in production.
-const sessions = new Map();
-// session structure: { key: Buffer, expiresAt: number, usedNonces: Set }
+// 🔑 Use .env secret for consistency
+const SECRET = process.env.SECRET_KEY  ;
+console.log(SECRET)
+const KEY = crypto.createHash("sha256").update(SECRET).digest();
 
-const SESSION_TTL_MS = 60 * 1000; // 60 seconds
+function decryptToken(token) {
+  const [ivBase64, encrypted] = token.split(":");
+  const iv = Buffer.from(ivBase64, "base64");
+  const decipher = crypto.createDecipheriv("aes-256-cbc", KEY, iv);
+  let decrypted = decipher.update(encrypted, "base64", "utf8");
+  decrypted += decipher.final("utf8");
+  return JSON.parse(decrypted);
+}
 
-// create a new session key and id
-app.post("/api/session", (req, res) => {
-  const id = uuidv4();
-  const key = crypto.randomBytes(32); // 256-bit session key
-  const expiresAt = Date.now() + SESSION_TTL_MS;
-  sessions.set(id, { key, expiresAt, usedNonces: new Set() });
-  // return key in base64 (transported over TLS)
-  res.json({ ok: true, sessionId: id, sessionKey: key.toString("base64"), ttl: SESSION_TTL_MS / 1000 });
-});
-
-// helper: decrypt payload produced by WebCrypto (ciphertext includes tag at the end)
-function decryptWithKeyEnvelope(envelopeB64, keyBuffer) {
+function verifyEncryptedToken(req, res, next) {
   try {
-    const envelopeJson = Buffer.from(envelopeB64, "base64").toString("utf8");
-    const env = JSON.parse(envelopeJson);
-    const iv = Buffer.from(env.iv, "base64");
-    const ciphertextAndTag = Buffer.from(env.ciphertext, "base64"); // ciphertext + tag (WebCrypto returns tag appended)
-    // separate tag (last 16 bytes)
-    const tagLen = 16;
-    if (ciphertextAndTag.length < tagLen) throw new Error("ciphertext too short");
-    const tag = ciphertextAndTag.slice(ciphertextAndTag.length - tagLen);
-    const ciphertext = ciphertextAndTag.slice(0, ciphertextAndTag.length - tagLen);
+    const token = req.headers["x-secure-token"];
+    if (!token) return res.status(403).json({ error: "Missing secure token" });
 
-    const decipher = crypto.createDecipheriv("aes-256-gcm", keyBuffer, iv, { authTagLength: 16});
-    decipher.setAuthTag(tag);
-    const pt = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    const data = JSON.parse(pt.toString("utf8"));
-    return { ok: true, data };
+    const data = decryptToken(token);
+    const now = Date.now();
+    if (now - data.timestamp > 2 * 60 * 1000)
+      return res.status(403).json({ error: "Kya be chintu" });
+
+    next();
   } catch (err) {
-    return { ok: false, error: err.message };
+    console.error("Verification error:", err.message);
+    res.status(403).json({ error: "kya be chutiye" });
   }
 }
 
-// TERABOX fetch function (your same function)
-async function fetchTeraboxData(url) {
-  const endpoint = "https://teradownloadr.com/wp-admin/admin-ajax.php";
-  const payload = qs.stringify({
-    action: "terabox_fetch",
-    url,
-    nonce: "77deb4f191",
-  });
-  const headers = {
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "Origin": "https://teradownloadr.com",
-    "Referer": "https://teradownloadr.com/",
-    "User-Agent": "Mozilla/5.0",
+async function fetchOneViewResult(rollNo) {
+  const url = "https://oneview.aktu.ac.in/WebPages/AKTU/OneView.aspx";
+
+  const data = {
+    __EVENTTARGET: "",
+    __EVENTARGUMENT: "",
+    __VIEWSTATE:
+      "/wEPDwULLTExMDg0MzM4NTIPZBYCAgMPZBYEAgMPZBYEAgkPDxYCHgdWaXNpYmxlaGRkAgsPDxYCHwBnZBYCAgEPZBYEAgMPDxYCHgdFbmFibGVkaGRkAgUPFgIfAWhkAgkPZBYCAgEPZBYCZg9kFgICAQ88KwARAgEQFgAWABYADBQrAABkGAEFEmdyZFZpZXdDb25mbGljdGlvbg9nZEj7pHjMdpqzXPMViMldFkeGjx3IpdUVid7sjedCGPPI",
+    __VIEWSTATEGENERATOR: "FF2D60E4",
+    __EVENTVALIDATION:
+      "/wEdAAWjieCZ6D3jJPRsYhIb4WL1WB/t8XsfPbhKtaDxBSD9L47U3Vc0WZ+wxclqyPFfzmNKpf/A83qpx8oXSYxifk/OuqJzdLRkOMLOoT0zZmF15DWzOb+YJ8ghyo6LVCa9G/Z8aT4v6Aejt4yzYIiEWTI1",
+    txtRollNo: rollNo,
+    "g-recaptcha-response": "",
+    btnSearch: "खोजें",
+    hidForModel: "",
   };
-  const response = await axios.post(endpoint, payload, { headers, responseType: "json", validateStatus: null });
-  return response.data;
+
+  const headers = {
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Content-Type": "application/x-www-form-urlencoded",
+    Origin: "https://oneview.aktu.ac.in",
+    Referer: "https://oneview.aktu.ac.in/WebPages/AKTU/OneView.aspx",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+  };
+
+  const response = await axios.post(url, qs.stringify(data), { headers });
+  let html = response.data;
+
+ // 🧹 Clean and modify HTML
+html = html
+  // Remove all <script> tags (including self-closing)
+  .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, "")
+  .replace(/<script[^>]*\/>/gi, "")
+  // Remove all <a> tags but keep inner text
+  .replace(/<a\b[^>]*>(.*?)<\/a>/gi, "$1")
+  // Inject your custom script before </body>
+  .replace(/<\/body>/i, `
+    <script>
+      const headers = document.getElementsByClassName("headerclass");
+      Array.from(headers).forEach(header => {
+        header.addEventListener("click", () => {
+          const targetId = header.id;
+          const targetDiv = document.querySelectorAll(\`#\${targetId}\`)[1];
+          if (targetDiv) {
+            targetDiv.style.display =
+              targetDiv.style.display === "block" ? "none" : "block";
+          }
+        });
+      });
+    </script>
+  </body>`);
+
+
+
+  return html;
 }
 
-// main endpoint: accepts { sessionId, payload }
-app.post("/api/terabox", async (req, res) => {
+app.post("/api/secure", verifyEncryptedToken, async (req, res) => {
   try {
-    const { sessionId, payload } = req.body;
-    if (!sessionId || !payload) return res.status(400).json({ ok: false, message: "Missing sessionId or payload" });
+    const { rollNo } = req.body;
+    if (!rollNo) return res.status(400).json({ error: "Missing roll number" });
 
-    const session = sessions.get(sessionId);
-    if (!session) return res.status(401).json({ ok: false, message: "Invalid or expired session" });
-
-    if (Date.now() > session.expiresAt) {
-      sessions.delete(sessionId);
-      return res.status(401).json({ ok: false, message: "Session expired" });
-    }
-
-    // decrypt payload using session key
-    const dec = decryptWithKeyEnvelope(payload, session.key);
-    if (!dec.ok) return res.status(401).json({ ok: false, message: "Decryption failed" });
-
-    const { url, ts, nonce } = dec.data;
-    if (!url || !ts || !nonce) return res.status(400).json({ ok: false, message: "Missing url|ts|nonce" });
-
-    // check timestamp freshness
-    const MAX_DRIFT = 2 * 60 * 1000; // 2 minutes
-    if (Math.abs(Date.now() - ts) > MAX_DRIFT) return res.status(401).json({ ok: false, message: "Stale request" });
-
-    // check nonce uniqueness to prevent replay
-    if (session.usedNonces.has(nonce)) return res.status(401).json({ ok: false, message: "Replay detected (nonce used)" });
-    session.usedNonces.add(nonce);
-
-    // Optionally delete session now to make single-use:
-    // sessions.delete(sessionId);
-
-    // Validate url (example: restrict to teraboxapp.com)
-    if (!url.startsWith("https://teraboxapp.com/")) return res.status(400).json({ ok: false, message: "Invalid URL domain" });
-
-    // Perform external fetch
-    const result = await fetchTeraboxData(url);
-    return res.json({ ok: true, data: result });
+    const result = await fetchOneViewResult(rollNo);
+    res.json({ success: true, html: result });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ ok: false, message: "Server error", details: err.message });
+    console.error("Fetch error:", err.message);
+    res.status(500).json({ error: "Failed to fetch result" });
   }
 });
 
-// cleanup expired sessions periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, s] of sessions.entries()) if (s.expiresAt < now) sessions.delete(id);
-}, 30 * 1000);
-
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
-
-
-
+app.listen(5000, () =>
+  console.log("🚀 Secure API running on port 5000")
+);
