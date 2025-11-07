@@ -1,6 +1,6 @@
 import express from "express";
 import crypto from "crypto";
-import cors from "cors";
+// import cors from "cors";
 import axios from "axios";
 import qs from "qs";
 import dotenv from "dotenv";
@@ -10,9 +10,9 @@ import { load } from "cheerio";
 
 dotenv.config();
 const app = express();
-app.use(cors({
-  origin: ["http://localhost:3000", "https://aktubrand.vercel.app"]
-}));
+// app.use(cors({
+//   origin: ["http://localhost:3000", "https://aktubrand.vercel.app"]
+// }));
 app.use(express.json());
 
 // 🔑 Use .env secret for consistency
@@ -97,3 +97,4 @@ app.post("/api/secure", verifyEncryptedToken, async (req, res) => {
 app.listen(5000, () =>
   console.log("🚀 Secure API running on port 5000")
 );
+
