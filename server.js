@@ -5,43 +5,53 @@ import axios from "axios";
 import qs from "qs";
 import dotenv from "dotenv";
 
-
 dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔑 Use .env secret for consistency
-const SECRET = process.env.SECRET_KEY  ;
-console.log(SECRET)
-const KEY = crypto.createHash("sha256").update(SECRET).digest();
+// 🔑 Secret key from environment
+const SECRET = process.env.SECRET_KEY;
 
-function decryptToken(token) {
-  const [ivBase64, encrypted] = token.split(":");
-  const iv = Buffer.from(ivBase64, "base64");
-  const decipher = crypto.createDecipheriv("aes-256-cbc", KEY, iv);
-  let decrypted = decipher.update(encrypted, "base64", "utf8");
-  decrypted += decipher.final("utf8");
-  return JSON.parse(decrypted);
-}
-
-function verifyEncryptedToken(req, res, next) {
+// ---------------------- HMAC Token Verification ----------------------
+function verifyHMACToken(req, res, next) {
   try {
     const token = req.headers["x-secure-token"];
     if (!token) return res.status(403).json({ error: "Missing secure token" });
 
-    const data = decryptToken(token);
-    const now = Date.now();
-    if (now - data.timestamp > 2 * 60 * 1000)
-      return res.status(403).json({ error: "Kya be chintu" });
+    // Token format: base64Payload.signature
+    const [payloadB64, signature] = token.split(".");
+    if (!payloadB64 || !signature)
+      return res.status(403).json({ error: "error aa gaya na bsdk" });
+
+    const payloadStr = Buffer.from(payloadB64, "base64").toString("utf8");
+
+    // Verify signature
+    const expected = crypto
+      .createHmac("sha256", SECRET)
+      .update(payloadStr)
+      .digest("base64");
+
+    if (expected !== signature)
+      return res.status(403).json({ error: "error aa gaya na bsdk" });
+
+    const payload = JSON.parse(payloadStr);
+
+    // Check expiration (2 minutes)
+    if (Date.now() - payload.timestamp > 2 * 60 * 1000)
+      return res.status(403).json({ error: "are chutiye!!" });
+
+    // Attach payload to request if needed
+    req.tokenPayload = payload;
 
     next();
   } catch (err) {
-    console.error("Verification error:", err.message);
-    res.status(403).json({ error: "kya  chiiye" });
+    console.error("Token verification error:", err.message);
+    res.status(403).json({ error: "Invalid token" });
   }
 }
 
+// ---------------------- Fetch OneView Result ----------------------
 async function fetchOneViewResult(rollNo) {
   const url = "https://oneview.aktu.ac.in/WebPages/AKTU/OneView.aspx";
 
@@ -70,25 +80,22 @@ async function fetchOneViewResult(rollNo) {
   };
 
   const response = await axios.post(url, qs.stringify(data), { headers });
-  let html = response.data;
-
-
-  return html;
+  return response.data;
 }
 
-app.post("/api/secure", verifyEncryptedToken, async (req, res) => {
+// ---------------------- Routes ----------------------
+app.post("/api/secure", verifyHMACToken, async (req, res) => {
   try {
     const { rollNo } = req.body;
     if (!rollNo) return res.status(400).json({ error: "Missing roll number" });
 
-    const result = await fetchOneViewResult(rollNo);
-    res.json({ success: true, html: result });
+    const html = await fetchOneViewResult(rollNo);
+    res.json({ success: true, html });
   } catch (err) {
     console.error("Fetch error:", err.message);
     res.status(500).json({ error: "Failed to fetch result" });
   }
 });
 
-app.listen(5000, () =>
-  console.log("🚀 Secure API running on port 5000")
-);
+// ---------------------- Start Server ----------------------
+app.listen(5000, () => console.log("🚀 Secure API running on port 5000"));
