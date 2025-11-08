@@ -33,7 +33,7 @@ app.use("/api/", limiter);
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: ["http://localhost:3000","https://teradownloader.netlify.app/"],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "x-secure-token"],
   })
@@ -189,3 +189,4 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
   console.log(`🚀 Secure API running on port ${PORT} (with Helmet 🛡️)`)
 );
+
