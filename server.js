@@ -33,12 +33,11 @@ app.use("/api/", limiter);
 
 app.use(
   cors({
-    origin: ["http://localhost:3000", "https://teradownloader.netlify.app"],
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "x-secure-token"],
   })
 );
-
 
 app.use(express.json());
 
@@ -106,15 +105,16 @@ async function fetchVideoMetadata(teraboxUrl) {
   }
 
   const data = JSON.parse(text);
-  if (data?.list?.length) {
+  if (data?.list?.length) { 
     const video = data.list[0];
+    const total_size = data.total_files;
     const streamUrl =
       video.fast_stream_url ||
       video.m3u8_url ||
       video.stream_url ||
       video.m3u8;
     console.log("✅ Stream URL found:", streamUrl);
-    return { video, streamUrl };
+    return { video,streamUrl, total_size,data };
   }
 
   throw new Error("No valid video info returned");
@@ -138,10 +138,11 @@ async function fetchViaWorker(originalUrl) {
 /* ----------------------- 🎥 Full Process ----------------------- */
 async function fetchTeraboxVideo(teraboxUrl) {
   try {
-    const { streamUrl } = await fetchVideoMetadata(teraboxUrl);
+    const { video,streamUrl, total_size,data } = await fetchVideoMetadata(teraboxUrl);
     const workerContent = await fetchViaWorker(streamUrl);
+    // console.log("✅ Worker content :",workerContent)
     console.log("✅ Worker responded, length:", workerContent.length);
-    return streamUrl;
+    return { data };
   } catch (err) {
     console.error("❌ Video fetch error:", err.message);
     return null;
@@ -160,7 +161,7 @@ function verifyJWT(req, res, next) {
     next();
   } catch (err) {
     console.error("JWT verification error:", err.message);
-    res.status(403).json({ error: "kya be chutiye tu fir aa gaya !! " });
+    res.status(403).json({ error: "kya be chutiyae, tu fir aa gaya ?" });
   }
 }
 
@@ -190,5 +191,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
   console.log(`🚀 Secure API running on port ${PORT} (with Helmet 🛡️)`)
 );
-
-
