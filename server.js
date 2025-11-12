@@ -8,6 +8,8 @@ import fetch from "node-fetch";
 import { pipeline } from "stream";
 import { promisify } from "util";
 import rateLimit from "express-rate-limit";
+import { getAktuResultHTML } from "./funtions/getAktuResult.js";
+
 
 const limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -33,10 +35,7 @@ app.use("/api/", limiter);
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "https://terafetch.netlify.app", // ❌ remove trailing slash
-    ],
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "x-secure-token"],
   })
@@ -164,7 +163,7 @@ function verifyJWT(req, res, next) {
     next();
   } catch (err) {
     console.error("JWT verification error:", err.message);
-    res.status(403).json({ error: "kya be chutiyae, tu fir aa gaya ?" });
+    res.status(403).json({ error: "Invalid or expired token" });
   }
 }
 
@@ -187,6 +186,17 @@ app.post("/api/secure", verifyJWT, async (req, res) => {
   }
 });
 
+app.post("/api/result",  async (req, res) => {
+  try {
+    const { rollNo } = req.body;  
+    const result = await getAktuResultHTML(rollNo);
+    if (!result) throw new Error("Failed to fetch result");
+    return res.json({ success: true, result });
+  }
+  catch(err){
+    console.error("Fetch error:", err.message);
+  }
+})
  
 
 /* ----------------------- 🚀 Start Server ----------------------- */
@@ -194,4 +204,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
   console.log(`🚀 Secure API running on port ${PORT} (with Helmet 🛡️)`)
 );
-
